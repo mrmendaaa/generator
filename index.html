@@ -549,7 +549,7 @@
                     currentPage = [];
                 }
 
-                let rawTitle = sec.title;
+                let rawTitle = sec.title.replace(/\\n/g, '\n');
                 let titleLines = rawTitle.split('\n');
                 if (document.getElementById("capsHeader").checked) {
                     titleLines = titleLines.map(l => l.toUpperCase());
