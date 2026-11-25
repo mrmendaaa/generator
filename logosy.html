@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generator Plansz Dubbingowych</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.1.3/build/mp4-muxer.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f1016;
+            --card-bg: #181922;
+            --accent: #e50914;
+            --text-main: #ffffff;
+            --text-muted: #a7a8b2;
+            --border: #2d2f3d;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
+        body { background: var(--bg-color); color: var(--text-main); display: flex; height: 100vh; overflow: hidden; }
+        
+        .tree-sidebar { width: 320px; background: #12131a; border-right: 1px solid var(--border); display: flex; flex-direction: column; height: 100%; flex-shrink: 0; z-index: 10; }
+        .tree-header { padding: 20px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+        .tree-header h2 { font-size: 1rem; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; }
+        .tree-content { flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        
+        .season-group { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .season-title-bar { padding: 12px 14px; background: rgba(255,255,255,0.05); display: flex; justify-content: space-between; align-items: center; font-weight: 600; font-size: 0.9rem; cursor: pointer; user-select: none; transition: 0.2s; }
+        .season-title-bar:hover { background: rgba(255,255,255,0.08); }
+        .season-episodes { padding: 8px; display: flex; flex-direction: column; gap: 6px; background: rgba(0,0,0,0.15); }
+        
+        .episode-item { padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; color: var(--text-muted); transition: 0.2s; }
+        .episode-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .episode-item.active { background: var(--accent); color: #fff; font-weight: 500; }
+
+        .main-content-area { flex: 1; display: flex; flex-direction: column; height: 100%; overflow-y: auto; }
+        
+        .top-bar { background: rgba(24, 25, 34, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); padding: 15px 30px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; position: sticky; top: 0; z-index: 100; }
+        .top-bar h1 { font-size: 1.2rem; font-weight: 600; color: #fff; }
+        .top-bar-actions { display: flex; gap: 10px; }
+
+        .form-container { max-width: 1100px; width: 100%; margin: 0 auto; padding: 30px 20px; display: flex; flex-direction: column; gap: 30px; }
+        
+        .panel-section { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 25px; display: flex; flex-direction: column; gap: 18px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.3); }
+        .panel-section h3 { font-size: 1rem; color: #fff; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+        
+        label { font-size: 0.85rem; color: var(--text-muted); display: flex; flex-direction: column; gap: 6px; width: 100%; }
+        input[type="text"], input[type="number"], select { background: #0f1016; border: 1px solid var(--border); color: #fff; padding: 10px 14px; border-radius: 6px; font-size: 0.95rem; width: 100%; }
+        input[type="color"] { width: 100%; height: 40px; border: 1px solid var(--border); background: #0f1016; border-radius: 6px; cursor: pointer; }
+        
+        .row { display: flex; gap: 15px; width: 100%; align-items: flex-end; }
+        .row > * { flex: 1; min-width: 0; }
+        
+        button { background: #2b2d3f; color: #fff; border: 1px solid var(--border); padding: 10px 18px; border-radius: 6px; font-size: 0.9rem; font-weight: 500; cursor: pointer; transition: 0.2s; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; height: 41px; }
+        button:hover { background: #383b52; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        button.primary { background: var(--accent); border-color: var(--accent); }
+        button.primary:hover:not(:disabled) { background: #f6121d; }
+        button.danger { background: rgba(229, 9, 20, 0.1); color: #ff5c5c; border-color: rgba(229, 9, 20, 0.3); width: 38px; height: 38px; padding: 0; flex-shrink: 0; }
+        button.danger:hover { background: rgba(229, 9, 20, 0.2); }
+        button.small { padding: 6px 10px; font-size: 0.8rem; height: auto; }
+
+        .item-card { background: rgba(0,0,0,0.25); border: 1px solid var(--border); padding: 16px; border-radius: 8px; display: flex; flex-direction: column; gap: 12px; width: 100%; }
+        .item-header { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; color: var(--text-muted); font-weight: 600; }
+        
+        .dropzone-container { display: flex; gap: 8px; align-items: center; width: 100%; }
+        .dropzone { border: 2px dashed var(--border); padding: 10px; text-align: center; border-radius: 6px; background: rgba(0,0,0,0.1); cursor: pointer; transition: 0.2s; font-size: 0.85rem; color: var(--text-muted); height: 41px; display: flex; align-items: center; justify-content: center; flex: 1; }
+        .dropzone:hover { border-color: var(--accent); background: rgba(229,9,20,0.05); color: #fff; }
+
+        .checkbox-label { display: flex; flex-direction: row; align-items: center; gap: 10px; font-size: 0.9rem; color: var(--text-main); cursor: pointer; width: 100%; height: 41px; }
+        .checkbox-label input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+
+        .preview-section { background: #08090c; border-top: 2px solid var(--border); padding: 40px 20px; display: flex; flex-direction: column; align-items: center; gap: 20px; width: 100%; margin-top: 40px; }
+        .canvas-container { box-shadow: 0 25px 60px rgba(0,0,0,0.9); border: 1px solid var(--border); max-width: 100%; width: 1000px; display: flex; border-radius: 8px; overflow: hidden; background: #000; }
+        canvas { width: 100%; height: auto; display: block; }
+        
+        .preview-nav { display: flex; align-items: center; gap: 20px; background: var(--card-bg); padding: 12px 25px; border-radius: 8px; border: 1px solid var(--border); }
+        .progress-bar-wrap { width: 100%; background: #0f1016; border: 1px solid var(--border); border-radius: 6px; height: 10px; overflow: hidden; display: none; }
+        .progress-bar-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.1s linear; }
+    </style>
+</head>
+<body>
+
+    <div class="tree-sidebar">
+        <div class="tree-header">
+            <h2>Generator plansz</h2>
+            <button class="primary small" onclick="addSeason()">+ Dodaj sezon</button>
+        </div>
+        <div class="tree-content" id="treeContainer"></div>
+    </div>
+
+    <div class="main-content-area" id="mainArea">
+        <div class="top-bar">
+            <h1 id="currentEpTitle">Edycja: Sezon 1 - Odcinek 1</h1>
+            <div class="top-bar-actions">
+                <button onclick="saveProject()">Zapisz projekt</button>
+                <button onclick="document.getElementById('loadJson').click()">Wczytaj</button>
+                <input type="file" id="loadJson" accept=".json" style="display:none" onchange="loadProject(this)">
+                <button class="primary" onclick="scrollToPreview()">Podgląd i Eksport ↓</button>
+            </div>
+        </div>
+
+        <div class="form-container">
+            <div class="panel-section">
+                <h3>Informacje o projekcie</h3>
+                <div class="row">
+                    <label>Tytuł serialu / projektu <input type="text" id="projectName" value="Tytuł Serialu" oninput="updateProjectName()"></label>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Wygląd i Rozdzielczość</h3>
+                <div class="row">
+                    <label>Rozdzielczość
+                        <select id="resolutionPreset" onchange="applyResolutionPreset()">
+                            <option value="1920x1080">1920 x 1080 (Full HD)</option>
+                            <option value="3840x2160">3840 x 2160 (4K UHD)</option>
+                            <option value="1280x720">1280 x 720 (HD)</option>
+                            <option value="1440x1080">1440 x 1080 (4:3)</option>
+                            <option value="custom">Niestandardowa...</option>
+                        </select>
+                    </label>
+                    <label>Wyrównanie pionowe
+                        <select id="verticalAlign" onchange="draw()">
+                            <option value="center">Wyśrodkowane (optyczne)</option>
+                            <option value="top">Zaczynaj od góry</option>
+                        </select>
+                    </label>
+                </div>
+                <div class="row" id="customResBox" style="display: none;">
+                    <label>Szerokość <input type="number" id="customWidth" value="1920" oninput="updateCanvasDimensions()"></label>
+                    <label>Wysokość <input type="number" id="customHeight" value="1080" oninput="updateCanvasDimensions()"></label>
+                </div>
+                
+                <div class="row">
+                    <label>Kolor tła <input type="color" id="bgColor" value="#000000" oninput="draw()"></label>
+                    <label>Czcionka systemowa
+                        <select id="systemFont" onchange="draw()">
+                            <option value="Arial">Arial</option>
+                            <option value="Calibri">Calibri</option>
+                            <option value="Segoe UI">Segoe UI</option>
+                            <option value="Times New Roman">Times New Roman</option>
+                            <option value="Courier New">Courier New</option>
+                        </select>
+                    </label>
+                    <label>Korekta pionowa Y (px) <input type="number" id="verticalOffset" value="0" step="5" oninput="draw()"></label>
+                </div>
+
+                <div class="row">
+                    <label>Rozmiar nagłówka <input type="number" id="headerSize" value="42" oninput="draw()"></label>
+                    <label>Rozmiar tekstu <input type="number" id="textSize" value="30" oninput="draw()"></label>
+                    <label>Odstęp kolumn (środek ↔ boki) <input type="number" id="columnGap" value="40" oninput="draw()"></label>
+                </div>
+                <div class="row">
+                    <label>Kolor nagłówków <input type="color" id="headerColor" value="#ffffff" oninput="draw()"></label>
+                    <label>Kolor funkcji / ról <input type="color" id="roleColor" value="#a7a8b2" oninput="draw()"></label>
+                    <label>Kolor nazwisk <input type="color" id="nameColor" value="#ffffff" oninput="draw()"></label>
+                </div>
+
+                <div class="row" style="margin-top: 5px;">
+                    <label class="checkbox-label"><input type="checkbox" id="capsHeader" checked onchange="draw()"> Wielkie litery (Nagłówki)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="boldHeader" onchange="draw()"> Pogrubienie (Nagłówki)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="capsRoles" onchange="draw()"> Wielkie litery (Funkcje)</label>
+                    <label class="checkbox-label"><input type="checkbox" id="capsNames" onchange="draw()"> Wielkie litery (Nazwiska)</label>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Logosy pod tekstem</h3>
+                <div class="row">
+                    <label>Logo 1 (Główne)
+                        <div class="dropzone-container">
+                            <div class="dropzone" ondragover="event.preventDefault()" ondrop="dropLogo(event, 1)" onclick="document.getElementById('logo1File').click()">
+                                <span id="logo1Text">Wybierz lub upuść PNG/SVG</span>
+                            </div>
+                            <button class="danger" id="logo1Remove" style="display:none;" onclick="removeLogo(1)" title="Usuń logo">✕</button>
+                        </div>
+                        <input type="file" id="logo1File" accept="image/png, image/svg+xml" style="display:none" onchange="loadLogo(this, 1)">
+                    </label>
+                    <label>Logo 2 (Kolaboracja)
+                        <div class="dropzone-container">
+                            <div class="dropzone" ondragover="event.preventDefault()" ondrop="dropLogo(event, 2)" onclick="document.getElementById('logo2File').click()">
+                                <span id="logo2Text">Wybierz lub upuść PNG/SVG</span>
+                            </div>
+                            <button class="danger" id="logo2Remove" style="display:none;" onclick="removeLogo(2)" title="Usuń logo">✕</button>
+                        </div>
+                        <input type="file" id="logo2File" accept="image/png, image/svg+xml" style="display:none" onchange="loadLogo(this, 2)">
+                    </label>
+                </div>
+                <div class="row">
+                    <label>Wysokość logo <input type="number" id="logoHeight" value="80" oninput="draw()"></label>
+                    <label>Odstęp od tekstu <input type="number" id="logoGap" value="35" oninput="draw()"></label>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>
+                    Sekcje i treść plansz (dla wybranego odcinka)
+                    <button class="primary small" onclick="addSection()">+ Dodaj sekcję</button>
+                </h3>
+                <div id="sectionsContainer" style="display: flex; flex-direction: column; gap: 20px; margin-top: 5px;"></div>
+            </div>
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <h2 style="font-size: 1.2rem; color: #fff; text-transform: uppercase; letter-spacing: 1px;">Podgląd na żywo</h2>
+            <div class="canvas-container">
+                <canvas id="previewCanvas" width="1920" height="1080"></canvas>
+            </div>
+            
+            <div class="preview-nav">
+                <button onclick="changeSlide(-1)">Poprzednia plansza</button>
+                <span id="slideIndicator" style="font-size: 0.95rem; font-weight: 500;">Plansza 1 z 1</span>
+                <button onclick="changeSlide(1)">Następna plansza</button>
+            </div>
+
+            <div class="panel-section" style="max-width: 1000px; margin-top: 20px;">
+                <h3>Eksport plików</h3>
+                <div class="row">
+                    <button onclick="exportPNG()">Pobierz obecną planszę (PNG)</button>
+                    <button class="primary" onclick="exportZIP()">Pobierz wszystkie plansze (ZIP)</button>
+                </div>
+                <div class="row" style="margin-top: 10px;">
+                    <label>Czas trwania 1 planszy (s) <input type="number" id="videoDuration" value="4" step="0.5" min="1"></label>
+                    <label class="checkbox-label" style="align-self: flex-end;">
+                        <input type="checkbox" id="videoFade"> Płynne przejścia Fade
+                    </label>
+                    <button class="primary" id="btnExportMP4" onclick="exportRealMP4()" style="align-self: flex-end;">Generuj i pobierz gotowe MP4</button>
+                </div>
+                <div class="progress-bar-wrap" id="mp4ProgressWrap">
+                    <div class="progress-bar-fill" id="mp4ProgressFill"></div>
+                </div>
+                <div id="mp4Status" style="font-size: 0.85rem; color: var(--text-muted); display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let db = {
+            projectName: "Tytuł Serialu",
+            seasons: [
+                {
+                    name: "Sezon 1",
+                    collapsed: false,
+                    episodes: [
+                        {
+                            name: "Odcinek 1",
+                            sections: [
+                                {
+                                    title: "WERSJA POLSKA",
+                                    forceNewPage: false,
+                                    rows: [
+                                        { label: "Reżyseria", names: ["Jan Kowalski"], duplicateRole: false },
+                                        { label: "Dialogi", names: ["Anna Nowak"], duplicateRole: false }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        let currentSeasonIdx = 0;
+        let currentEpisodeIdx = 0;
+        let logo1Img = null;
+        let logo2Img = null;
+        let currentSlideIndex = 0;
+        let renderPages = [];
+
+        function scrollToPreview() {
+            document.getElementById('previewSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function updateProjectName() {
+            db.projectName = document.getElementById("projectName").value;
+        }
+
+        function getActiveEpisode() {
+            return db.seasons[currentSeasonIdx].episodes[currentEpisodeIdx];
+        }
+
+        function renderTree() {
+            const container = document.getElementById("treeContainer");
+            container.innerHTML = "";
+
+            db.seasons.forEach((season, sIdx) => {
+                let seasonDiv = document.createElement("div");
+                seasonDiv.className = "season-group";
+
+                let epListHtml = "";
+                if (!season.collapsed) {
+                    season.episodes.forEach((ep, eIdx) => {
+                        let isActive = (sIdx === currentSeasonIdx && eIdx === currentEpisodeIdx);
+                        epListHtml += `
+                            <div class="episode-item ${isActive ? 'active' : ''}" onclick="selectEpisode(${sIdx}, ${eIdx})">
+                                <span>${ep.name}</span>
+                                <button class="danger small" style="width:24px; height:24px; font-size:0.7rem;" onclick="event.stopPropagation(); removeEpisode(${sIdx}, ${eIdx})">✕</button>
+                            </div>
+                        `;
+                    });
+                    epListHtml += `<button class="small" style="width:100%; margin-top:6px;" onclick="addEpisode(${sIdx})">+ Dodaj odcinek</button>`;
+                }
+
+                seasonDiv.innerHTML = `
+                    <div class="season-title-bar" onclick="toggleSeason(${sIdx})">
+                        <span>${season.name}</span>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <button class="small danger" style="padding:2px 6px; height:auto;" onclick="event.stopPropagation(); removeSeason(${sIdx})">🗑</button>
+                            <span>${season.collapsed ? '▶' : '▼'}</span>
+                        </div>
+                    </div>
+                    <div class="season-episodes" style="display: ${season.collapsed ? 'none' : 'flex'}">
+                        ${epListHtml}
+                    </div>
+                `;
+                container.appendChild(seasonDiv);
+            });
+
+            let activeEp = getActiveEpisode();
+            document.getElementById("currentEpTitle").innerText = `Edycja: ${db.seasons[currentSeasonIdx].name} - ${activeEp.name}`;
+        }
+
+        function toggleSeason(sIdx) {
+            db.seasons[sIdx].collapsed = !db.seasons[sIdx].collapsed;
+            renderTree();
+        }
+
+        function selectEpisode(sIdx, eIdx) {
+            currentSeasonIdx = sIdx;
+            currentEpisodeIdx = eIdx;
+            renderTree();
+            renderEditor();
+            draw();
+        }
+
+        function addSeason() {
+            let newSeasonNum = db.seasons.length + 1;
+            db.seasons.push({
+                name: `Sezon ${newSeasonNum}`,
+                collapsed: false,
+                episodes: [{ name: "Odcinek 1", sections: JSON.parse(JSON.stringify(db.seasons[0].episodes[0].sections)) }]
+            });
+            currentSeasonIdx = db.seasons.length - 1;
+            currentEpisodeIdx = 0;
+            renderTree();
+            renderEditor();
+            draw();
+        }
+
+        function removeSeason(sIdx) {
+            if (db.seasons.length <= 1) return alert("Musisz zostawić przynajmniej jeden sezon.");
+            db.seasons.splice(sIdx, 1);
+            if (currentSeasonIdx >= db.seasons.length) currentSeasonIdx = db.seasons.length - 1;
+            currentEpisodeIdx = 0;
+            renderTree();
+            renderEditor();
+            draw();
+        }
+
+        function addEpisode(sIdx) {
+            let season = db.seasons[sIdx];
+            let lastEp = season.episodes[season.episodes.length - 1];
+            let newEpNum = season.episodes.length + 1;
+            let clonedSections = JSON.parse(JSON.stringify(lastEp ? lastEp.sections : []));
+            
+            season.episodes.push({
+                name: `Odcinek ${newEpNum}`,
+                sections: clonedSections
+            });
+
+            currentSeasonIdx = sIdx;
+            currentEpisodeIdx = season.episodes.length - 1;
+            renderTree();
+            renderEditor();
+            draw();
+        }
+
+        function removeEpisode(sIdx, eIdx) {
+            if (db.seasons[sIdx].episodes.length <= 1) return alert("Sezon musi mieć przynajmniej jeden odcinek.");
+            db.seasons[sIdx].episodes.splice(eIdx, 1);
+            if (currentEpisodeIdx >= db.seasons[sIdx].episodes.length) currentEpisodeIdx = db.seasons[sIdx].episodes.length - 1;
+            currentSeasonIdx = sIdx;
+            renderTree();
+            renderEditor();
+            draw();
+        }
+
+        function renderEditor() {
+            const container = document.getElementById("sectionsContainer");
+            container.innerHTML = "";
+            let ep = getActiveEpisode();
+
+            ep.sections.forEach((sec, sIdx) => {
+                let secDiv = document.createElement("div");
+                secDiv.className = "item-card";
+                
+                let rowsHtml = "";
+                sec.rows.forEach((row, rIdx) => {
+                    rowsHtml += `
+                        <div style="background: rgba(0,0,0,0.2); padding: 12px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px;">
+                            <div class="row">
+                                <input type="text" placeholder="Funkcja / Rola" value="${row.label}" oninput="updateRow(${sIdx}, ${rIdx}, 'label', this.value)">
+                                <input type="text" placeholder="Osoba / Osoby (po przecinku)" value="${row.names.join(', ')}" oninput="updateRowNames(${sIdx}, ${rIdx}, this.value)">
+                                <button class="danger" onclick="removeRow(${sIdx}, ${rIdx})">✕</button>
+                            </div>
+                            <label class="checkbox-label">
+                                <input type="checkbox" ${row.duplicateRole ? 'checked' : ''} onchange="toggleDuplicate(${sIdx}, ${rIdx}, this.checked)">
+                                Duplikuj nazwę funkcji przy wielu osobach
+                            </label>
+                        </div>
+                    `;
+                });
+
+                secDiv.innerHTML = `
+                    <div class="item-header">
+                        <span>Sekcja #${sIdx + 1}</span>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="small" onclick="moveSection(${sIdx}, -1)">▲</button>
+                            <button class="small" onclick="moveSection(${sIdx}, 1)">▼</button>
+                            <button class="danger" onclick="removeSection(${sIdx})">✕</button>
+                        </div>
+                    </div>
+                    <label>Nagłówek sekcji (użyj \n dla nowej linii)
+                        <input type="text" value="${sec.title}" oninput="updateSectionTitle(${sIdx}, this.value)">
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" ${sec.forceNewPage ? 'checked' : ''} onchange="toggleNewPage(${sIdx}, this.checked)">
+                        Zacznij tę sekcję na nowej planszy (osobny ekran)
+                    </label>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 5px;">${rowsHtml}</div>
+                    <button class="primary small" onclick="addRow(${sIdx})" style="align-self: flex-start; margin-top: 5px;">+ Dodaj pozycję</button>
+                `;
+                container.appendChild(secDiv);
+            });
+        }
+
+        function addSection() {
+            getActiveEpisode().sections.push({ title: "NOWA SEKCJA", forceNewPage: true, rows: [{ label: "Rola", names: ["Osoba"], duplicateRole: false }] });
+            renderEditor();
+            draw();
+        }
+        function removeSection(sIdx) { getActiveEpisode().sections.splice(sIdx, 1); renderEditor(); draw(); }
+        function moveSection(sIdx, dir) {
+            let sections = getActiveEpisode().sections;
+            let target = sIdx + dir;
+            if (target < 0 || target >= sections.length) return;
+            let temp = sections[sIdx];
+            sections[sIdx] = sections[target];
+            sections[target] = temp;
+            renderEditor();
+            draw();
+        }
+        function updateSectionTitle(sIdx, val) { getActiveEpisode().sections[sIdx].title = val; draw(); }
+        function toggleNewPage(sIdx, val) { getActiveEpisode().sections[sIdx].forceNewPage = val; draw(); }
+        function addRow(sIdx) { getActiveEpisode().sections[sIdx].rows.push({ label: "Nowa rola", names: ["Imię Nazwisko"], duplicateRole: false }); renderEditor(); draw(); }
+        function removeRow(sIdx, rIdx) { getActiveEpisode().sections[sIdx].rows.splice(rIdx, 1); renderEditor(); draw(); }
+        function updateRow(sIdx, rIdx, field, val) { getActiveEpisode().sections[sIdx].rows[rIdx][field] = val; draw(); }
+        function updateRowNames(sIdx, rIdx, val) { getActiveEpisode().sections[sIdx].rows[rIdx].names = val.split(',').map(n => n.trim()); draw(); }
+        function toggleDuplicate(sIdx, rIdx, val) { getActiveEpisode().sections[sIdx].rows[rIdx].duplicateRole = val; draw(); }
+
+        function applyResolutionPreset() {
+            const val = document.getElementById("resolutionPreset").value;
+            const customBox = document.getElementById("customResBox");
+            if (val === "custom") {
+                customBox.style.display = "flex";
+            } else {
+                customBox.style.display = "none";
+                let parts = val.split("x");
+                document.getElementById("customWidth").value = parts[0];
+                document.getElementById("customHeight").value = parts[1];
+            }
+            updateCanvasDimensions();
+        }
+
+        function updateCanvasDimensions() {
+            const canvas = document.getElementById("previewCanvas");
+            canvas.width = parseInt(document.getElementById("customWidth").value) || 1920;
+            canvas.height = parseInt(document.getElementById("customHeight").value) || 1080;
+            draw();
+        }
+
+        function loadLogo(input, logoNum) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                const img = new Image();
+                img.onload = () => {
+                    if (logoNum === 1) {
+                        logo1Img = img;
+                        document.getElementById("logo1Text").innerText = file.name;
+                        document.getElementById("logo1Remove").style.display = "inline-flex";
+                    }
+                    if (logoNum === 2) {
+                        logo2Img = img;
+                        document.getElementById("logo2Text").innerText = file.name;
+                        document.getElementById("logo2Remove").style.display = "inline-flex";
+                    }
+                    draw();
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeLogo(logoNum) {
+            if (logoNum === 1) {
+                logo1Img = null;
+                document.getElementById("logo1Text").innerText = "Wybierz lub upuść PNG/SVG";
+                document.getElementById("logo1Remove").style.display = "none";
+                document.getElementById("logo1File").value = "";
+            }
+            if (logoNum === 2) {
+                logo2Img = null;
+                document.getElementById("logo2Text").innerText = "Wybierz lub upuść PNG/SVG";
+                document.getElementById("logo2Remove").style.display = "none";
+                document.getElementById("logo2File").value = "";
+            }
+            draw();
+        }
+
+        function dropLogo(e, logoNum) {
+            e.preventDefault();
+            if (e.dataTransfer.files.length) {
+                loadLogo({ files: e.dataTransfer.files }, logoNum);
+            }
+        }
+
+        function buildPages() {
+            let pages = [];
+            let currentPage = [];
+            let ep = getActiveEpisode();
+
+            ep.sections.forEach(sec => {
+                let sectionItems = [];
+                sec.rows.forEach(row => {
+                    row.names.forEach((name, nIdx) => {
+                        let nameStr = document.getElementById("capsNames").checked ? name.toUpperCase() : name;
+                        let labelStr = (nIdx === 0 || row.duplicateRole) ? row.label : "";
+                        if (document.getElementById("capsRoles").checked) labelStr = labelStr.toUpperCase();
+                        
+                        sectionItems.push({ label: labelStr, name: nameStr });
+                    });
+                });
+
+                if (sec.forceNewPage && currentPage.length > 0) {
+                    pages.push(currentPage);
+                    currentPage = [];
+                }
+
+                let rawTitle = sec.title;
+                let titleLines = rawTitle.split('\n');
+                if (document.getElementById("capsHeader").checked) {
+                    titleLines = titleLines.map(l => l.toUpperCase());
+                }
+
+                currentPage.push({ titleLines: titleLines, items: sectionItems });
+            });
+
+            if (currentPage.length > 0) pages.push(currentPage);
+            if (pages.length === 0) pages.push([]);
+            return pages;
+        }
+
+        function draw(alpha = 1.0) {
+            const canvas = document.getElementById("previewCanvas");
+            const ctx = canvas.getContext("2d");
+            ctx.imageSmoothingEnabled = true;
+            ctx.imageSmoothingQuality = "high";
+            
+            let bgColor = document.getElementById("bgColor").value;
+            let headerColor = document.getElementById("headerColor").value;
+            let roleColor = document.getElementById("roleColor").value;
+            let nameColor = document.getElementById("nameColor").value;
+            let headerSize = parseInt(document.getElementById("headerSize").value);
+            let textSize = parseInt(document.getElementById("textSize").value);
+            let logoHeight = parseInt(document.getElementById("logoHeight").value);
+            let logoGap = parseInt(document.getElementById("logoGap").value);
+            let columnGap = parseInt(document.getElementById("columnGap").value);
+            let verticalOffset = parseInt(document.getElementById("verticalOffset").value) || 0;
+            const vAlign = document.getElementById("verticalAlign").value;
+            const fontFam = document.getElementById("systemFont").value;
+            const isHeaderBold = document.getElementById("boldHeader").checked;
+
+            renderPages = buildPages();
+            if (currentSlideIndex >= renderPages.length) currentSlideIndex = renderPages.length - 1;
+            if (currentSlideIndex < 0) currentSlideIndex = 0;
+
+            document.getElementById("slideIndicator").innerText = `Plansza ${currentSlideIndex + 1} z ${renderPages.length}`;
+
+            // Zawsze najpierw malujemy nieprzezroczyste tło, żeby przy fade obraz ściemniał się do koloru tła
+            ctx.save();
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Teraz ustawiamy przezroczystość dla tekstu i logotypów
+            ctx.globalAlpha = alpha;
+            ctx.textBaseline = "top";
+
+            let pageSections = renderPages[currentSlideIndex] || [];
+            let headerH = headerSize * 1.4;
+            let rowH = textSize * 1.7;
+            let sectionGap = 45;
+
+            let totalTextBlockHeight = 0;
+            pageSections.forEach((sec, idx) => {
+                totalTextBlockHeight += (sec.titleLines.length * headerH) + 16;
+                if (sec.items.length > 0) {
+                    totalTextBlockHeight += (sec.items.length - 1) * rowH + textSize;
+                }
+                if (idx < pageSections.length - 1) {
+                    totalTextBlockHeight += sectionGap;
+                }
+            });
+
+            let hasLogo = (logo1Img || logo2Img);
+            let totalBlockHeight = totalTextBlockHeight + (hasLogo ? (logoGap + logoHeight) : 0);
+
+            let startY = 100;
+            if (vAlign === "center") {
+                startY = (canvas.height - totalBlockHeight) / 2;
+            }
+            startY += verticalOffset;
+
+            let currentY = startY;
+
+            pageSections.forEach((sec, idx) => {
+                ctx.fillStyle = headerColor;
+                ctx.font = `${isHeaderBold ? 'bold ' : ''}${headerSize}px ${fontFam}`;
+                ctx.textAlign = "center";
+                
+                sec.titleLines.forEach(line => {
+                    ctx.fillText(line, canvas.width / 2, currentY);
+                    currentY += headerH;
+                });
+                currentY += 16;
+
+                ctx.font = `${textSize}px ${fontFam}`;
+                sec.items.forEach((item, itemIdx) => {
+                    if (item.label !== "") {
+                        ctx.textAlign = "right";
+                        ctx.fillStyle = roleColor;
+                        ctx.fillText(item.label, (canvas.width / 2) - columnGap, currentY);
+                    }
+
+                    ctx.textAlign = "left";
+                    ctx.fillStyle = nameColor;
+                    ctx.fillText(item.name, (canvas.width / 2) + columnGap, currentY);
+
+                    currentY += (itemIdx < sec.items.length - 1) ? rowH : textSize;
+                });
+
+                if (idx < pageSections.length - 1) {
+                    currentY += sectionGap;
+                }
+            });
+
+            if (hasLogo) {
+                currentY += logoGap;
+                let lHeight = logoHeight;
+
+                if (logo1Img && logo2Img) {
+                    let w1 = (logo1Img.width / logo1Img.height) * lHeight;
+                    let w2 = (logo2Img.width / logo2Img.height) * lHeight;
+                    let gap = 40;
+                    let totalW = w1 + w2 + gap;
+                    let startX = (canvas.width - totalW) / 2;
+                    ctx.drawImage(logo1Img, startX, currentY, w1, lHeight);
+                    ctx.drawImage(logo2Img, startX + w1 + gap, currentY, w2, lHeight);
+                } else if (logo1Img) {
+                    let w1 = (logo1Img.width / logo1Img.height) * lHeight;
+                    let startX = (canvas.width - w1) / 2;
+                    ctx.drawImage(logo1Img, startX, currentY, w1, lHeight);
+                }
+            }
+            ctx.restore();
+        }
+
+        function changeSlide(direction) {
+            currentSlideIndex += direction;
+            if (currentSlideIndex >= renderPages.length) currentSlideIndex = renderPages.length - 1;
+            if (currentSlideIndex < 0) currentSlideIndex = 0;
+            draw();
+            scrollToPreview();
+        }
+
+        function exportPNG() {
+            const canvas = document.getElementById("previewCanvas");
+            let ep = getActiveEpisode();
+            canvas.toBlob(blob => saveAs(blob, `${db.projectName}-${db.seasons[currentSeasonIdx].name}-${ep.name}-plansza-${currentSlideIndex + 1}.png`));
+        }
+
+        function exportZIP() {
+            const zip = new JSZip();
+            const canvas = document.getElementById("previewCanvas");
+            const originalIndex = currentSlideIndex;
+            let ep = getActiveEpisode();
+
+            let promises = renderPages.map((_, idx) => {
+                return new Promise(resolve => {
+                    currentSlideIndex = idx;
+                    draw();
+                    canvas.toBlob(blob => {
+                        zip.file(`plansza-${idx + 1}.png`, blob);
+                        resolve();
+                    });
+                });
+            });
+
+            Promise.all(promises).then(() => {
+                currentSlideIndex = originalIndex;
+                draw();
+                zip.generateAsync({ type: "blob" }).then(content => saveAs(content, `${db.projectName}-${db.seasons[currentSeasonIdx].name}-${ep.name}-plansze.zip`));
+            });
+        }
+
+        // --- PRAWDZIWY, DETERMINISTYCZNY EKSPORT DO MP4 (H.264) ---
+        async function exportRealMP4() {
+            if (typeof VideoEncoder === 'undefined') {
+                alert("Twoja przeglądarka nie obsługuje sprzętowego enkodera MP4 (WebCodecs). Użyj Chrome, Edge lub Brave.");
+                return;
+            }
+            if (typeof Mp4Muxer === 'undefined') {
+                alert("Brak połączenia z biblioteką MP4. Sprawdź internet i odśwież stronę.");
+                return;
+            }
+
+            const btn = document.getElementById("btnExportMP4");
+            const progressWrap = document.getElementById("mp4ProgressWrap");
+            const progressFill = document.getElementById("mp4ProgressFill");
+            const statusText = document.getElementById("mp4Status");
+
+            btn.disabled = true;
+            progressWrap.style.display = "block";
+            statusText.style.display = "block";
+            progressFill.style.width = "0%";
+
+            const canvas = document.getElementById("previewCanvas");
+            // Wymiary dla H.264 muszą być parzyste
+            const width = canvas.width % 2 === 0 ? canvas.width : canvas.width - 1;
+            const height = canvas.height % 2 === 0 ? canvas.height : canvas.height - 1;
+            const fps = 30;
+            const durationPerSlide = parseFloat(document.getElementById("videoDuration").value) || 4;
+            const useFade = document.getElementById("videoFade").checked;
+            const framesPerSlide = Math.round(durationPerSlide * fps);
+            const totalFrames = renderPages.length * framesPerSlide;
+
+            const muxer = new Mp4Muxer.Muxer({
+                target: new Mp4Muxer.ArrayBufferTarget(),
+                video: {
+                    codec: 'avc',
+                    width: width,
+                    height: height
+                },
+                fastStart: 'in-memory'
+            });
+
+            const videoEncoder = new VideoEncoder({
+                output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+                error: e => {
+                    console.error(e);
+                    alert("Błąd kodowania wideo: " + e.message);
+                }
+            });
+
+            // Profil High Level 5.1 obsługuje płynnie zarówno 1080p, jak i 4K
+            videoEncoder.configure({
+                codec: 'avc1.640033',
+                width: width,
+                height: height,
+                bitrate: width >= 3840 ? 50_000_000 : 28_000_000,
+                bitrateMode: 'constant',
+                latencyMode: 'quality',
+                framerate: fps
+            });
+
+            const originalIndex = currentSlideIndex;
+            let frameCounter = 0;
+
+            try {
+                for (let slideIdx = 0; slideIdx < renderPages.length; slideIdx++) {
+                    currentSlideIndex = slideIdx;
+                    const fadeFrames = Math.min(Math.round(fps * 0.5), Math.floor(framesPerSlide / 3));
+
+                    for (let f = 0; f < framesPerSlide; f++) {
+                        let alpha = 1.0;
+                        if (useFade && fadeFrames > 0) {
+                            if (f < fadeFrames) {
+                                alpha = f / fadeFrames;
+                            } else if (f >= framesPerSlide - fadeFrames) {
+                                alpha = (framesPerSlide - 1 - f) / fadeFrames;
+                            }
+                        }
+
+                        draw(alpha);
+
+                        const timestamp = Math.round((frameCounter * 1_000_000) / fps);
+                        const duration = Math.round(1_000_000 / fps);
+                        const frame = new VideoFrame(canvas, { timestamp, duration });
+
+                        // Klatka kluczowa na starcie każdej planszy dla idealnego przewijania
+                        const isKeyFrame = (f === 0);
+                        videoEncoder.encode(frame, { keyFrame: isKeyFrame });
+                        frame.close();
+
+                        frameCounter++;
+
+                        // Aktualizacja paska postępu co 10 klatek
+                        if (frameCounter % 10 === 0 || frameCounter === totalFrames) {
+                            const pct = Math.round((frameCounter / totalFrames) * 100);
+                            progressFill.style.width = pct + "%";
+                            statusText.innerText = `Renderowanie MP4: ${pct}% (klatka ${frameCounter} z ${totalFrames})`;
+                            await new Promise(r => setTimeout(r, 0));
+                        }
+                    }
+                }
+
+                statusText.innerText = "Finalizowanie pliku MP4...";
+                await videoEncoder.flush();
+                muxer.finalize();
+
+                const buffer = muxer.target.buffer;
+                const blob = new Blob([buffer], { type: 'video/mp4' });
+                const ep = getActiveEpisode();
+                saveAs(blob, `${db.projectName}-${db.seasons[currentSeasonIdx].name}-${ep.name}-plansze.mp4`);
+
+                statusText.innerText = "Gotowe! Plik MP4 został pobrany.";
+            } catch (err) {
+                console.error(err);
+                alert("Wystąpił błąd podczas generowania MP4: " + err.message);
+            } finally {
+                currentSlideIndex = originalIndex;
+                draw(1.0);
+                btn.disabled = false;
+                setTimeout(() => {
+                    progressWrap.style.display = "none";
+                    statusText.style.display = "none";
+                }, 4000);
+            }
+        }
+
+        function saveProject() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `${db.projectName}-projekt.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function loadProject(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = e => {
+                db = JSON.parse(e.target.result);
+                document.getElementById("projectName").value = db.projectName || "Serial";
+                currentSeasonIdx = 0;
+                currentEpisodeIdx = 0;
+                renderTree();
+                renderEditor();
+                draw();
+            };
+            reader.readAsText(file);
+        }
+
+        renderTree();
+        renderEditor();
+        window.onload = () => { updateCanvasDimensions(); };
+    </script>
+</body>
+</html>
