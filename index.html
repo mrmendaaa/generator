@@ -554,7 +554,6 @@
                 if (document.getElementById("capsHeader").checked) {
                     titleLines = titleLines.map(l => l.toUpperCase());
                 }
-                }
 
                 currentPage.push({ titleLines: titleLines, items: sectionItems });
             });
@@ -717,7 +716,7 @@
             });
         }
 
-        // --- EKSPORT DO MP4 (H.264) ---
+        // --- PRAWDZIWY, DETERMINISTYCZNY EKSPORT DO MP4 (H.264) ---
         async function exportRealMP4() {
             if (typeof VideoEncoder === 'undefined') {
                 alert("Twoja przeglądarka nie obsługuje sprzętowego enkodera MP4 (WebCodecs). Użyj Chrome, Edge lub Brave.");
